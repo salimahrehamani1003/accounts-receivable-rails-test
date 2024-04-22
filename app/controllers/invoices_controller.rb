@@ -1,5 +1,5 @@
 class InvoicesController < ApplicationController
-  before_action :set_invoice, only: [:show, :edit, :update, :destroy]
+  before_action :set_invoice, only: [:show, :edit, :update, :destroy, :convert_to_yen]
   after_action :save_line_items, except: [:index]
 
   def index
@@ -7,20 +7,11 @@ class InvoicesController < ApplicationController
   end
 
   def show
-    @client = @invoice.client
+    find_invoice
+  end
 
-    @line_items = (
-      @invoice.line_items.joins(:product).where("products.price_cents != 0") +
-      @invoice.line_items.joins(:service).where("services.price_cents != 0")
-    ).group_by { |line_item| line_item.service.present? ? :service : :product }
-
-    @total = @line_items.values.flatten.map { |line_item|
-      [line_item.price_override_cents ||
-        line_item&.product&.price_cents ||
-        line_item&.service&.price_cents, line_item.quantity]
-    }.sum { |(price_cents, quantity)|
-      price_cents * quantity
-    }
+  def convert_to_yen
+    find_invoice
   end
 
   def new
@@ -54,6 +45,23 @@ class InvoicesController < ApplicationController
   end
 
   private
+
+  def find_invoice
+    @client = @invoice.client
+
+    @line_items = (
+      @invoice.line_items.joins(:product).where("products.price_cents != 0") +
+      @invoice.line_items.joins(:service).where("services.price_cents != 0")
+    ).group_by { |line_item| line_item.service.present? ? :service : :product }
+
+    @total = @line_items.values.flatten.map { |line_item|
+      [line_item.price_override_cents ||
+        line_item&.product&.price_cents ||
+        line_item&.service&.price_cents, line_item.quantity]
+    }.sum { |(price_cents, quantity)|
+      price_cents * quantity
+    }
+  end
 
   def set_invoice
     @invoice = Invoice.find(params[:id])
